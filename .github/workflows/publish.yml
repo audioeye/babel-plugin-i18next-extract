@@ -1,0 +1,47 @@
+name: NPM Publish
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions: write-all
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Bump version
+        run: npm version ${{ github.event.inputs.version_type || 'patch' }} --no-git-tag-version
+
+      - name: Run tests and build
+        run: yarn run check && yarn run build
+
+      - name: Bump version and publish
+        run: |
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # For scoped packages add: NPM_CONFIG_ACCESS: public
+    
