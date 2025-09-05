@@ -11,20 +11,40 @@ on:
           - patch
           - minor
           - major
+  push:
+    branches:
+      - master
 
 permissions: write-all
 
 jobs:
   publish:
+    if: ${{ ! contains(github.event.head_commit.message, 'chore(lerna)') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Setup release token
+        uses: actions/create-github-app-token@v2
+        id: release_bot_token
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
-      - name: Setup Node.js
+      - uses: actions/checkout@v4
+        # we're going to push to a protected branch, so the default token won't fly
+        with:
+          token: ${{ steps.release_bot_token.outputs.token }}
+
+      - name: Configure CI Git User
+        run: |
+          git config --global user.name "AudioEye Release Bot"
+          git config --global user.email 148816155+audioeye-release-bot[bot]@users.noreply.github.com
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 22
+          registry-url: "https://npm.pkg.github.com"
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable corepack
         run: corepack enable
@@ -33,15 +53,19 @@ jobs:
         run: yarn install
 
       - name: Bump version
-        run: npm version ${{ github.event.inputs.version_type || 'patch' }} --no-git-tag-version
+        run: npm version ${{ github.event.inputs.version_type || 'patch' }}
 
       - name: Run tests and build
         run: yarn run check && yarn run build
 
-      - name: Bump version and publish
-        run: |
-          npm publish
+      - name: Commit version and publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # For scoped packages add: NPM_CONFIG_ACCESS: public
+        run: |
+          git add package.json yarn.lock
+          git commit -m "chore(lerna): publish babel-plugin-i18next-extract package"
+          git push origin
+          cd lib/
+          npm publish
+
     
